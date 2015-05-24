@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+	<head>
+        <link rel="stylesheet" type="text/css" href="shelf.css">
+		<script src="/static/jquery-2.1.1.min.js"></script>		
+        <script src="/static/react-with-addons-0.13.3.min.js"></script>
+        <!-- <script src="https://fb.me/react-with-addons-0.13.3.min.js"></script> -->
+        <script src="/static/progress.js"></script>		
+        <script src="/static/minivents.min.js"></script>
+        <script src="/static/background.js"></script>
+		<script src="/static/nw.js"></script>        
+	</head>
+	<body>
+		<script>						
+			$(document).ready(function() {
+                Background.random();
+                NightsWatch.start(document.getElementById('nightswatch'));
+			});
+		</script>						
+		<div id="nightswatch"></div>	
+	</body>
+</html>
