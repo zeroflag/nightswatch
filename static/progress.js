@@ -46,7 +46,7 @@ Progress = React.createClass({
         _context.globalAlpha = this.props.alpha;
         _context.fillStyle = this.props.color;
         if (this.props.showLabel)
-            _context.fillText(this._normalizedProgress().toFixed(0) + '%', _radius, _radius);
+            _context.fillText(this._normalizedProgress().toFixed(1) + '%', _radius, _radius);
         _context.beginPath();
         _context.arc(_radius, _radius, _radius, Math.PI * 1.5, Math.PI * percent, false);
         _context.arc(_radius, _radius, _radius / 1.8, Math.PI * percent, Math.PI * 1.5, true);

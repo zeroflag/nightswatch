@@ -114,7 +114,7 @@ body {
 }
 .search_bar {
     float: left;
-    margin: 12px 0 0 15px;    
+    margin: 12px 0 0 5px;    
     opacity: .5;
 }
 .nav_btn {

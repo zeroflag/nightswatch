@@ -51,7 +51,7 @@ var SystemStatus = React.createClass({
 var NavigatorBar = React.createClass({
     render: function() {        
         return element('div', {className: 'shelf_header'},
-            element(NavigatorButton, {name: 'All', totalMovies: this.props.totalMovies, selected: this._isFeed(FEED_ALL, NO_FILTER), hasSeparator: true, onClick: function() { this._switchFeed(FEED_ALL, NO_FILTER) }.bind(this)}),
+            element(NavigatorButton, {name: 'All', totalMovies: this.props.totalMovies, selected: this.props.url == FEED_ALL && this.props.filter != FILTER_MOVIES && this.props.filter != FILTER_SERIES, hasSeparator: true, onClick: function() { this._switchFeed(FEED_ALL, NO_FILTER) }.bind(this)}),
             element(NavigatorButton, {name: 'Movies', totalMovies: this.props.totalMovies, selected: this._isFeed(FEED_ALL, FILTER_MOVIES), hasSeparator: true, onClick: function() { this._switchFeed(FEED_ALL, FILTER_MOVIES) }.bind(this)}),
             element(NavigatorButton, {name: 'Series', totalMovies: this.props.totalMovies, selected: this._isFeed(FEED_ALL, FILTER_SERIES), hasSeparator: true, onClick: function() { this._switchFeed(FEED_ALL, FILTER_SERIES) }.bind(this)}),
             element(NavigatorButton, {name: 'Watchlist', totalMovies: this.props.totalMovies, selected: this._isFeed(FEED_WATCH_LIST, NO_FILTER), hasSeparator: true, onClick: function() { this._switchFeed(FEED_WATCH_LIST, NO_FILTER) }.bind(this)}),
@@ -59,7 +59,7 @@ var NavigatorBar = React.createClass({
             element(NavigatorButton, {name: 'Completed', totalMovies: this.props.totalMovies, selected: this._isFeed(FEED_ALL, FILTER_COMPLETED), hasSeparator: true, onClick: function() { this._switchFeed(FEED_ALL, FILTER_COMPLETED) }.bind(this)}),
             element(NavigatorButton, {name: '20', selected: this.props.pageSize == 20, hasSeparator: true, onClick: this._switchPageSize}),
             element(NavigatorButton, {name: '100', selected: this.props.pageSize == 100, hasSeparator: true, onClick: this._switchPageSize}),
-            element(NavigatorButton, {name: '1000', selected: this.props.pageSize == 1000, hasSeparator: false, onClick: this._switchPageSize}),
+            element(NavigatorButton, {name: '500', selected: this.props.pageSize == 500, hasSeparator: false, onClick: this._switchPageSize}),
             element(SystemStatus, {status: this.props.systemStatus}),
             element(SearchBar),
             element(PageBar, {totalMovies: this.props.totalMovies, pageSize: this.props.pageSize, pageNumber: this.props.pageNumber})
@@ -118,7 +118,7 @@ var MovieCase = React.createClass({
     },
     _renderStatus: function() {
         if (this._isDownloading())
-            return element(Progress, {progress: this.props.movie.download.progress, color: '#ffec03', alpha: 0.90, className: 'box_progress'});
+            return element(Progress, {progress: this.props.movie.download.progress * 100, color: '#ffec03', alpha: 0.90, className: 'box_progress'});
         if (this._isReloading())
             return element(Progress, {progress: this.state.reloadProgress, color: '#66CC66', alpha: 0.90, className: 'box_progress', showLabel: false});
         return null    
@@ -150,9 +150,15 @@ var MovieDetails = React.createClass({
                     'Trailer: ',
                     element('a', {href: this.props.movie.torrent.trailerUrl}, this.props.movie.torrent.trailerUrl)),
                 div({className: 'sub_details', style: {'paddingTop': '5px'}}, this.props.movie.details.plot),
-                div({className: 'action_btn', onClick: function() { EventBus.emit('download-movie', this.props.movie) }.bind(this) }, this.props.movie.download.status == 'completed' ? 'Play' : 'Download'),
+                div({className: 'action_btn', onClick: function() { EventBus.emit(this._actionEvent(), this.props.movie) }.bind(this) }, this._actionTitle()),
                 div({className: 'action_btn', onClick: function() { EventBus.emit('refresh-movie', this.props.movie) }.bind(this) }, 'Refresh')));
-    }
+    },
+    _actionTitle: function() {
+        return this.props.movie.download.status == 'completed' ? 'Play' : 'Download'
+    },
+    _actionEvent: function() {
+        return this.props.movie.download.status == 'completed' ? 'play-movie' : 'download-movie'
+    }    
 });
 
 var Shelf = React.createClass({
@@ -239,6 +245,7 @@ var Feed = function(changeHandler) {
         $.getJSON(model.url + "/reload/" + encodeURIComponent(aMovie.torrent.guid), function(reloadedMovie) {
             model.movies.refresh([reloadedMovie]);
             model.details = null;
+            alertify.success("Reloaded " + reloadedMovie.torrent.title);
             changed();
         }.bind(this)).fail(feedFailure);
     }    
@@ -263,14 +270,23 @@ var Feed = function(changeHandler) {
         model.details = null;
         changed();
     }        
-    this.downloadMovie = function(aMovie) {    
-        var action = model.url + '/download/' + encodeURIComponent(aMovie.torrent.guid); // TODO play-el is
-        $.getJSON(action, function(any) {
-            alert(any);
-        }.bind(this)).fail(feedFailure);
+    this.downloadMovie = function(aMovie) {
+        alertify.confirm("Download " + aMovie.torrent.title + "?", function (e) {
+            if (e) {
+                $.getJSON(model.url + '/download/' + encodeURIComponent(aMovie.torrent.guid), function(any) {
+                    alertify.success("Download started " + aMovie.torrent.title);
+                }.bind(this)).fail(feedFailure);
+            }
+        }.bind(this));
     } 
+    this.playMovie = function(aMovie) {
+        $.getJSON(model.url + '/play/' + encodeURIComponent(aMovie.torrent.guid), function(any) {
+            alertify.success("Playing " + aMovie.torrent.title);
+        }.bind(this)).fail(feedFailure);
+    }
     this.search = function(text) {
         model.url = FEED_ALL;
+        model.pageNumber = 0;
         model.filter = FILTER_TEXT(text);
         changed();
     }
@@ -279,6 +295,7 @@ var Feed = function(changeHandler) {
     }
     function feedFailure(e) {
         model.systemStatus = 'disconnected';
+        alertify.error("Cannot load feed");
         changed();
     }    
     this.showDetails = function(aMovie, dom) {
@@ -304,6 +321,7 @@ function start(dom) {
     EventBus.on('page-size', feed.pageSize);
     EventBus.on('movie-selected', feed.showDetails);
     EventBus.on('download-movie', feed.downloadMovie);
+    EventBus.on('play-movie', feed.playMovie);
     EventBus.on('refresh-movie', feed.refreshMovie);
     EventBus.on('switch-feed', feed.switchFeed, feed);
     EventBus.on('search-text', feed.search, feed);
