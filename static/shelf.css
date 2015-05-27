@@ -5,9 +5,13 @@ body {
     background: linear-gradient(#030406, #000000); /* Standard syntax */
 	font: 11px "Lucida Grande",Arial,Verdana,sans-serif;
 	width: 100%;
-	margin: 0 auto;    
+	margin: 0 auto;
 }					
+#background {
+    
+}
 #nightswatch {
+    background-color:rgba(45,45,48,0.6);
 }
 .items {
 	float: left;
@@ -19,7 +23,7 @@ body {
 	width: 950px;
 	padding-top: 6px;
 	height: 213px;
-	background: #d4d4d4 url(/static/img/details.png);
+    background-color: rgb(45,45,48);
 	overflow: hidden;
 	box-shadow: inset 0 9px 40px rgba(0,0,0,0.8);
 	z-index: 30;
@@ -33,12 +37,20 @@ body {
 	color: #d9d9d9;
 	text-decoration: none;
 }
+.details b{
+	color: #068AE2;
+}
 .sub_details {
-	color: #808080;
-	padding: 1px;	
+    color: #A2A2A4;
+	padding: 2px;
+}
+.download_details {
+    color: #A2A2A4;
+	padding: 2px;
+    padding-top: 20px;   
 }
 .sub_details a {
-	color: #d9d9d9;				
+	color: #d9d9d9;
 	text-decoration: none;		
 }
 .action_btn a {

@@ -116,11 +116,11 @@ var MovieCase = React.createClass({
             ? this.props.movie.details.poster
             : '/static/img/no-image.png';
     },
-    _renderStatus: function() {
-        if (this._isDownloading())
-            return element(Progress, {progress: this.props.movie.download.progress * 100, color: '#ffec03', alpha: 0.90, className: 'box_progress'});
+    _renderStatus: function() {        
+        if (this._isDownloading())               
+            return element(Progress, {progress: this.props.movie.download.progress * 100, color: '#0097FB', alpha: 0.90, className: 'box_progress'});
         if (this._isReloading())
-            return element(Progress, {progress: this.state.reloadProgress, color: '#66CC66', alpha: 0.90, className: 'box_progress', showLabel: false});
+            return element(Progress, {progress: this.state.reloadProgress, color: '#7FFF00', alpha: 0.90, className: 'box_progress', showLabel: false});
         return null    
     },            
     componentDidUpdate: function() {
@@ -136,29 +136,39 @@ var MovieCase = React.createClass({
 });
 
 var MovieDetails = React.createClass({    
-    render: function() {            
+    render: function() {
+        var movie = this.props.movie;
         return div({className: 'details', style: {top: this.props.top} }, 
             div({className: 'details_content'},
                 div({className: 'star imdb_sprites'}, 
-                    element('a', {href: this.props.movie.torrent.imdbLink}, this.props.movie.details.score)),
+                    element('a', {href: movie.torrent.imdbLink}, movie.details.score)),
                 element('h2', null, 
-                    element('a', {href: this.props.movie.torrent.guid}, this.props.movie.torrent.title)),
-                div({className: 'sub_details'}, 'Published at: ' + this.props.movie.torrent.pubDate),
-                div({className: 'sub_details'}, 'Category: ' + this.props.movie.torrent.category + (this.props.movie.details.genre ? " / " + this.props.movie.details.genre : "" )),
-                div({className: 'sub_details'}, 'Actors: ' + this.props.movie.details.actors),
+                    element('a', {href: movie.torrent.guid}, movie.torrent.title)),                                               
+                div({className: 'sub_details'}, 'Published at: ' + movie.torrent.pubDate),
+                div({className: 'sub_details'}, 'Category: ' + movie.torrent.category + (movie.details.genre ? " / " + movie.details.genre : "" )),
+                div({className: 'sub_details'}, 'Actors: ' + movie.details.actors),
                 div({className: 'sub_details'},
                     'Trailer: ',
-                    element('a', {href: this.props.movie.torrent.trailerUrl}, this.props.movie.torrent.trailerUrl)),
-                div({className: 'sub_details', style: {'paddingTop': '5px'}}, this.props.movie.details.plot),
-                div({className: 'action_btn', onClick: function() { EventBus.emit(this._actionEvent(), this.props.movie) }.bind(this) }, this._actionTitle()),
-                div({className: 'action_btn', onClick: function() { EventBus.emit('refresh-movie', this.props.movie) }.bind(this) }, 'Refresh')));
+                    element('a', {href: movie.details.trailerUrl}, movie.details.trailerUrl)),
+                div({className: 'sub_details', style: {paddingTop: '5px'}}, movie.details.plot),                                
+                div({className: 'action_btn', onClick: function() { EventBus.emit(this._actionEvent(), movie) }.bind(this) }, this._actionTitle()),
+                div({className: 'action_btn', onClick: function() { EventBus.emit('refresh-movie', movie) }.bind(this) }, 'Refresh'),
+                movie.download.status == "downloading" ? this._downloadDetails(movie) : null
+            ));
     },
     _actionTitle: function() {
         return this.props.movie.download.status == 'completed' ? 'Play' : 'Download'
     },
     _actionEvent: function() {
         return this.props.movie.download.status == 'completed' ? 'play-movie' : 'download-movie'
-    }    
+    },
+    _downloadDetails: function(movie) {    
+        return div({className: 'download_details'},
+            'Remaining time: ', element('b', {}, movie.download.eta),
+            ' Down Speed: ', element('b', {}, movie.download.dlSpeed),
+            ' Up Speed: ', element('b', {}, movie.download.upSpeed),
+            ' Size: ',  element('b', {}, movie.download.size));
+    }
 });
 
 var Shelf = React.createClass({
@@ -186,10 +196,15 @@ var Shelf = React.createClass({
         var renderedMovies = [];
         for (var i = this.props.model.pageNumber * this.props.model.pageSize; i < this._countVisible(filteredMovies); i++)
             renderedMovies.push(element(MovieCase, {movie: filteredMovies[i], key: filteredMovies[i].torrent.guid}));
+        while (renderedMovies.length <= 15)
+            renderedMovies.push(this._placeholder());
         return renderedMovies;
     },        
     _countVisible: function(filteredMovies) {
         return Math.min(this.props.model.pageNumber * this.props.model.pageSize + this.props.model.pageSize, filteredMovies.length);
+    },
+    _placeholder: function() {
+        return div({className: "box", style: {visibility: 'hidden'}});
     }
 });
 
@@ -226,9 +241,8 @@ var Movies = function(anArray) {
 var Feed = function(changeHandler) {   
     var model = {movies: new Movies(), pageSize: 20, pageNumber: 0, details: null, filter: NO_FILTER, url: FEED_ALL, systemStatus: 'ok'};
     
-    this.loadMovies = function(filter) {
+    this.loadMovies = function() {
         $.getJSON(model.url, function(movieFeed) {
-            model.filter = filter || NO_FILTER;
             model.movies = new Movies(movieFeed);
             changed();
         }.bind(this)).fail(feedFailure);
@@ -253,10 +267,12 @@ var Feed = function(changeHandler) {
         model.url = feedUrl;
         model.details = null;
         model.pageNumber = 0;
-        this.loadMovies(filter);
+        model.filter = filter;
+        this.loadMovies();
     }
-    this.pageSize = function(anInteger) {
+    this.pageSize = function(anInteger) {        
         model.pageSize = anInteger;
+        model.pageNumber = 0;
         model.details = null;
         changed();
     }    
@@ -315,6 +331,7 @@ function start(dom) {
     };
     var feed = new Feed(renderFeed);
     setInterval(function () { feed.refreshDownloadStatus() }, 3000);
+    setInterval(function () { feed.loadMovies() }, 60000 * 5);
     feed.loadMovies();                
     EventBus.on('next-page', feed.nextPage);
     EventBus.on('prev-page', feed.previousPage);

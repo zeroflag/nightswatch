@@ -29,7 +29,7 @@ Progress = React.createClass({
         _context = _canvas.getContext('2d');
         _context.textAlign = 'center';
         _context.textBaseline = 'middle';
-        return _context.font = "bold " + (_radius / 2) + "px Arial";
+        return _context.font = "bold " + (_radius / 2.5) + "px Arial";
     },
     progress: function(anInteger) {
         this.setState({progress: anInteger});
@@ -43,13 +43,13 @@ Progress = React.createClass({
     _drawTimer: function() {
         var decimals, percent, ref;
         percent = (2/100) * this._normalizedProgress() + 1.5;
-        _context.globalAlpha = this.props.alpha;
-        _context.fillStyle = this.props.color;
+        _context.globalAlpha = this.props.alpha;        
+        _context.fillStyle = this.props.color;                
         if (this.props.showLabel)
             _context.fillText(this._normalizedProgress().toFixed(1) + '%', _radius, _radius);
         _context.beginPath();
         _context.arc(_radius, _radius, _radius, Math.PI * 1.5, Math.PI * percent, false);
-        _context.arc(_radius, _radius, _radius / 1.8, Math.PI * percent, Math.PI * 1.5, true);
+        _context.arc(_radius, _radius, _radius / 1.6, Math.PI * percent, Math.PI * 1.5, true);
         return _context.fill();
     },
     render: function() {
