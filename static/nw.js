@@ -27,24 +27,34 @@ var NO_FILTER = function() { return true; };
 var FILTER_MOVIES = function(its, _) { try { return its.torrent.category.indexOf("Film") != -1; } catch(e) { return false; } };
 var FILTER_SERIES = function(its, _) { try { return its.torrent.category.indexOf("Sorozat") != -1; } catch(e) {return false; } };
 var FILTER_COMPLETED = function(its, _) { return its.download.status == "completed"; };      // TODO ez ne kliens filtering legyen
-
-// TODO meglevo filtereket meghagyni
 var FILTER_TEXT = function(text) {
-                    return function(aMovie) { 
-                        return aMovie.torrent.title.toLowerCase().indexOf(text.toLowerCase()) >= 0; 
-                    }
-                };
+    return function(aMovie) {
+        return aMovie.details.title
+            ? aMovie.details.title.toLowerCase().indexOf(text.toLowerCase()) >= 0
+            : aMovie.torrent.title.toLowerCase().indexOf(text.toLowerCase()) >= 0; 
+    }
+};
+var FILTER_EXPRESSION = function(enteredText) {
+    return function(each) { 
+        var movie = each.details;
+        var torrent = each.torrent;
+        var download = each.download;
+        try {
+            return eval(enteredText); 
+        } catch (e) {
+            throw {searchAbort: e};
+        }
+    }
+};
 var FEED_WATCH_LIST = '/feed/watched';
 var FEED_ALL = '/feed/all';
 var FEED_DOWNLOADING = '/feed/all/downloading';
+var FEED_COMPLETED = '/feed/all/completed';
 
-var SystemStatus = React.createClass({
+var LogoutButton = React.createClass({
     render: function() {
-        return div({title: 'Server status: ' + this.props.status},
-            element('b', {style: {color: this._color()}}, '•'));
-    },
-    _color: function() {
-        return this.props.status == 'ok' ? 'green' : 'red';
+        return div({title: 'Logout'},
+            element('b', {onClick: function() {EventBus.emit('logout'); } }, '\uD83D\uDD12'));
     }
 });
 
@@ -56,13 +66,13 @@ var NavigatorBar = React.createClass({
             element(NavigatorButton, {name: 'Series', totalMovies: this.props.totalMovies, selected: this._isFeed(FEED_ALL, FILTER_SERIES), hasSeparator: true, onClick: function() { this._switchFeed(FEED_ALL, FILTER_SERIES) }.bind(this)}),
             element(NavigatorButton, {name: 'Watchlist', totalMovies: this.props.totalMovies, selected: this._isFeed(FEED_WATCH_LIST, NO_FILTER), hasSeparator: true, onClick: function() { this._switchFeed(FEED_WATCH_LIST, NO_FILTER) }.bind(this)}),
             element(NavigatorButton, {name: 'Downloading', totalMovies: this.props.totalMovies, selected: this._isFeed(FEED_DOWNLOADING, NO_FILTER), hasSeparator: true, onClick: function() { this._switchFeed(FEED_DOWNLOADING, NO_FILTER) }.bind(this)}),
-            element(NavigatorButton, {name: 'Completed', totalMovies: this.props.totalMovies, selected: this._isFeed(FEED_ALL, FILTER_COMPLETED), hasSeparator: true, onClick: function() { this._switchFeed(FEED_ALL, FILTER_COMPLETED) }.bind(this)}),
+            element(NavigatorButton, {name: 'Completed', totalMovies: this.props.totalMovies, selected: this._isFeed(FEED_COMPLETED, NO_FILTER), hasSeparator: true, onClick: function() { this._switchFeed(FEED_COMPLETED, NO_FILTER) }.bind(this)}),
             element(NavigatorButton, {name: '20', selected: this.props.pageSize == 20, hasSeparator: true, onClick: this._switchPageSize}),
             element(NavigatorButton, {name: '100', selected: this.props.pageSize == 100, hasSeparator: true, onClick: this._switchPageSize}),
             element(NavigatorButton, {name: '500', selected: this.props.pageSize == 500, hasSeparator: false, onClick: this._switchPageSize}),
-            element(SystemStatus, {status: this.props.systemStatus}),
-            element(SearchBar),
-            element(PageBar, {totalMovies: this.props.totalMovies, pageSize: this.props.pageSize, pageNumber: this.props.pageNumber})
+            element(LogoutButton),
+            element(SearchBar, {advancedSearch: this.props.advancedSearch, searchError: this.props.searchError}),
+            element(PageBar, {totalMovies: this.props.totalMovies, pageSize: this.props.pageSize, pageNumber: this.props.pageNumber})            
         );
     },
     _isFeed: function(url, filter) {
@@ -78,27 +88,39 @@ var NavigatorBar = React.createClass({
 
 var SearchBar = React.createClass({
     render: function() {        
-        return element('input', {className: 'search_bar', ref: 'input', onChange: this.onChange, placeholder: 'search movie title'});
+        return span({},
+            element('input', {className: 'search_bar', ref: 'input', onChange: this.onChange, size: 20, placeholder: this.props.advancedSearch ? 'search expression' : 'search movie title'}),
+            element('b', {onClick: this._toggleAdvancedSearch, title: 'Toggle advanced search expression', style: {paddingLeft: '8px'}}, '\uD83D\uDD0D'));
     },
-    componentDidMount: function() {
-        this.refs.input.getDOMNode().focus();
+    componentDidMount: function() {        
+        this.refs.input.getDOMNode().focus();        
+    },
+    componentDidUpdate: function() {
+        this.refs.input.getDOMNode().setCustomValidity(this.props.searchError ? 'Invalid' : '');
     },
     _text: function() {        
         var text = this.refs.input.getDOMNode().value;
         return text == null || text.trim() == '' ? '' : text.trim();
     },
-    onChange: function(event) {
+    onChange: function(event) {        
         EventBus.emit('search-text', this._text());
-    },    
+    },
+    _toggleAdvancedSearch: function() {
+        EventBus.emit('toggle-advanced-search');
+    }    
 });
 
 var PageBar = React.createClass({
     render: function() {    
         return span({className: 'nav_btn'},
-                element('b', null, (this.props.pageNumber + 1) + '/' + Math.ceil(this.props.totalMovies / this.props.pageSize)),
-                span({className: "shelf_btn", onClick: function() { EventBus.emit('prev-page') }}, '<'),                
+                element('b', null, (this.props.pageNumber + 1) + '/' + this._pageCount()),
+                span({className: "shelf_btn", onClick: function() { EventBus.emit('prev-page') }}, '<'),
                 span({className: "shelf_btn", onClick: function() { EventBus.emit('next-page') }}, '>'));
-    },    
+    },
+    _pageCount: function() {
+        var pageCount = Math.ceil(this.props.totalMovies / this.props.pageSize);
+        return Math.max(1, pageCount);
+    }
 });
 
 var MovieCase = React.createClass({
@@ -181,7 +203,8 @@ var Shelf = React.createClass({
                 totalMovies: filteredMovies.length, 
                 filter: this.props.model.filter, 
                 url: this.props.model.url,
-                systemStatus: this.props.model.systemStatus,
+                advancedSearch: this.props.model.advancedSearch,
+                searchError: this.props.model.movies.searchError()
             }),
             div({className: 'shelf_inner'},
                 div({className: 'items'},
@@ -211,6 +234,8 @@ var Shelf = React.createClass({
 var Movies = function(anArray) {
     var movieDict = new Object();
     var guids = [];
+    var searchError = false;
+    var lastFilteredCount = 0;
     $.each(anArray || [], function(_, movie) {
         movieDict[movie.torrent.guid] = movie;
         guids.push(movie.torrent.guid);
@@ -226,23 +251,41 @@ var Movies = function(anArray) {
         }.bind(this));
     }    
     this.filtered = function(aFilter) {
+        searchError = false;
         var result = [];
-        $.each(guids, function(_, guid) {
-            if (aFilter(this.at(guid)))
-                result.push(this.at(guid));
-        }.bind(this));
+        try {
+            $.each(guids, function(_, guid) {
+                if (aFilter(this.at(guid)))
+                    result.push(this.at(guid));
+            }.bind(this));
+        } catch (e) {
+            if (e.searchAbort) {
+                searchError = true;                
+                return result;
+            }
+            throw e;
+        }            
+        lastFilteredCount = result.length;       
         return result;
     }
     this.count = function() {
         return guids.length;
     }
+    this.lastFilteredCount = function() { // XXX
+        return lastFilteredCount;
+    }
+    this.searchError = function() { // XXX
+        return searchError;
+    }
 }
 
 var Feed = function(changeHandler) {   
-    var model = {movies: new Movies(), pageSize: 20, pageNumber: 0, details: null, filter: NO_FILTER, url: FEED_ALL, systemStatus: 'ok'};
+    var model = {movies: new Movies(), pageSize: 20, pageNumber: 0, details: null, filter: NO_FILTER, url: FEED_ALL, advancedSearch : false};
     
     this.loadMovies = function() {
         $.getJSON(model.url, function(movieFeed) {
+            var diff = movieFeed.length - model.movies.count();
+            if (diff > 0 && model.movies.count() > 0) alertify.success("Added " + diff + " new movie(s)"); // TODO ez nem jo mer feed valtasnal is kiirja h added
             model.movies = new Movies(movieFeed);
             changed();
         }.bind(this)).fail(feedFailure);
@@ -282,7 +325,7 @@ var Feed = function(changeHandler) {
         changed();
     }    
     this.nextPage = function() {
-        if ((model.pageNumber + 1) * model.pageSize < model.movies.count()) model.pageNumber++;        
+        if ((model.pageNumber + 1) * model.pageSize < model.movies.lastFilteredCount()) model.pageNumber++;
         model.details = null;
         changed();
     }        
@@ -302,15 +345,22 @@ var Feed = function(changeHandler) {
     }
     this.search = function(text) {
         model.url = FEED_ALL;
-        model.pageNumber = 0;
-        model.filter = FILTER_TEXT(text);
+        model.pageNumber = 0;    
+        if (text) {
+            model.filter = model.advancedSearch ? FILTER_EXPRESSION(text) : FILTER_TEXT(text);
+        } else {
+            model.filter = NO_FILTER;
+        }
+        changed();
+    }
+    this.toggleAdvancedSearch = function(text) {        
+        model.advancedSearch = !model.advancedSearch;
         changed();
     }
     function changed() {
         changeHandler(model)
     }
     function feedFailure(e) {
-        model.systemStatus = 'disconnected';
         alertify.error("Cannot load feed");
         changed();
     }    
@@ -342,6 +392,14 @@ function start(dom) {
     EventBus.on('refresh-movie', feed.refreshMovie);
     EventBus.on('switch-feed', feed.switchFeed, feed);
     EventBus.on('search-text', feed.search, feed);
+    EventBus.on('logout', logout);
+    EventBus.on('toggle-advanced-search', feed.toggleAdvancedSearch, feed);
+}
+
+function logout() {
+    alertify.confirm("Are you sure you want to log out?", function (e) {
+        if (e) $.get("/logout", function(any) { location.reload(); });
+    });
 }
 
 return {'start': start};
