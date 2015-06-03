@@ -26,7 +26,6 @@ var NavigatorButton = React.createClass({
 var NO_FILTER = function() { return true; };
 var FILTER_MOVIES = function(its, _) { try { return its.torrent.category.indexOf("Film") != -1; } catch(e) { return false; } };
 var FILTER_SERIES = function(its, _) { try { return its.torrent.category.indexOf("Sorozat") != -1; } catch(e) {return false; } };
-var FILTER_COMPLETED = function(its, _) { return its.download.status == "completed"; };      // TODO ez ne kliens filtering legyen
 var FILTER_TEXT = function(text) {
     return function(aMovie) {
         return aMovie.details.title
@@ -48,13 +47,20 @@ var FILTER_EXPRESSION = function(enteredText) {
 };
 var FEED_WATCH_LIST = '/feed/watched';
 var FEED_ALL = '/feed/all';
-var FEED_DOWNLOADING = '/feed/all/downloading';
-var FEED_COMPLETED = '/feed/all/completed';
+var FEED_DOWNLOADING = '/torrents/downloading';
+var FEED_COMPLETED = '/torrents/completed';
 
 var LogoutButton = React.createClass({
     render: function() {
         return div({title: 'Logout'},
             element('b', {onClick: function() {EventBus.emit('logout'); } }, '\uD83D\uDD12'));
+    }
+});
+
+var ReloadFeedButton = React.createClass({
+    render: function() {
+        return div({title: 'Reload feed'},
+            element('b', {onClick: function() {EventBus.emit('reload-all'); } }, '\u21BA'));
     }
 });
 
@@ -64,19 +70,20 @@ var NavigatorBar = React.createClass({
             element(NavigatorButton, {name: 'All', totalMovies: this.props.totalMovies, selected: this.props.url == FEED_ALL && this.props.filter != FILTER_MOVIES && this.props.filter != FILTER_SERIES, hasSeparator: true, onClick: function() { this._switchFeed(FEED_ALL, NO_FILTER) }.bind(this)}),
             element(NavigatorButton, {name: 'Movies', totalMovies: this.props.totalMovies, selected: this._isFeed(FEED_ALL, FILTER_MOVIES), hasSeparator: true, onClick: function() { this._switchFeed(FEED_ALL, FILTER_MOVIES) }.bind(this)}),
             element(NavigatorButton, {name: 'Series', totalMovies: this.props.totalMovies, selected: this._isFeed(FEED_ALL, FILTER_SERIES), hasSeparator: true, onClick: function() { this._switchFeed(FEED_ALL, FILTER_SERIES) }.bind(this)}),
-            element(NavigatorButton, {name: 'Watchlist', totalMovies: this.props.totalMovies, selected: this._isFeed(FEED_WATCH_LIST, NO_FILTER), hasSeparator: true, onClick: function() { this._switchFeed(FEED_WATCH_LIST, NO_FILTER) }.bind(this)}),
-            element(NavigatorButton, {name: 'Downloading', totalMovies: this.props.totalMovies, selected: this._isFeed(FEED_DOWNLOADING, NO_FILTER), hasSeparator: true, onClick: function() { this._switchFeed(FEED_DOWNLOADING, NO_FILTER) }.bind(this)}),
-            element(NavigatorButton, {name: 'Completed', totalMovies: this.props.totalMovies, selected: this._isFeed(FEED_COMPLETED, NO_FILTER), hasSeparator: true, onClick: function() { this._switchFeed(FEED_COMPLETED, NO_FILTER) }.bind(this)}),
+            element(NavigatorButton, {name: 'Watchlist', totalMovies: this.props.totalMovies, selected: this._isFeed(FEED_WATCH_LIST), hasSeparator: true, onClick: function() { this._switchFeed(FEED_WATCH_LIST, NO_FILTER) }.bind(this)}),
+            element(NavigatorButton, {name: 'Downloading', totalMovies: this.props.totalMovies, selected: this._isFeed(FEED_DOWNLOADING), hasSeparator: true, onClick: function() { this._switchFeed(FEED_DOWNLOADING, NO_FILTER) }.bind(this)}),
+            element(NavigatorButton, {name: 'Completed', totalMovies: this.props.totalMovies, selected: this._isFeed(FEED_COMPLETED), hasSeparator: true, onClick: function() { this._switchFeed(FEED_COMPLETED, NO_FILTER) }.bind(this)}),
             element(NavigatorButton, {name: '20', selected: this.props.pageSize == 20, hasSeparator: true, onClick: this._switchPageSize}),
             element(NavigatorButton, {name: '100', selected: this.props.pageSize == 100, hasSeparator: true, onClick: this._switchPageSize}),
             element(NavigatorButton, {name: '500', selected: this.props.pageSize == 500, hasSeparator: false, onClick: this._switchPageSize}),
             element(LogoutButton),
+            element(ReloadFeedButton),
             element(SearchBar, {advancedSearch: this.props.advancedSearch, searchError: this.props.searchError}),
             element(PageBar, {totalMovies: this.props.totalMovies, pageSize: this.props.pageSize, pageNumber: this.props.pageNumber})            
         );
     },
     _isFeed: function(url, filter) {
-        return this.props.filter == filter && this.props.url == url;
+        return (!filter || this.props.filter == filter) && this.props.url == url;
     },
     _switchFeed: function(url, filter) {
         EventBus.emit('switch-feed', url, filter);
@@ -89,7 +96,7 @@ var NavigatorBar = React.createClass({
 var SearchBar = React.createClass({
     render: function() {        
         return span({},
-            element('input', {className: 'search_bar', ref: 'input', onChange: this.onChange, size: 20, placeholder: this.props.advancedSearch ? 'search expression' : 'search movie title'}),
+            element('input', {className: 'search_bar', ref: 'input', onChange: this.onChange, size: 16, placeholder: this.props.advancedSearch ? 'movie.score > 6 && movie.genre == "Comedy"' : 'Search for movie title'}),
             element('b', {onClick: this._toggleAdvancedSearch, title: 'Toggle advanced search expression', style: {paddingLeft: '8px'}}, '\uD83D\uDD0D'));
     },
     componentDidMount: function() {        
@@ -282,24 +289,29 @@ var Movies = function(anArray) {
 var Feed = function(changeHandler) {   
     var model = {movies: new Movies(), pageSize: 20, pageNumber: 0, details: null, filter: NO_FILTER, url: FEED_ALL, advancedSearch : false};
     
-    this.loadMovies = function() {
+    this.loadMovies = function(func) {
         $.getJSON(model.url, function(movieFeed) {
-            var diff = movieFeed.length - model.movies.count();
-            if (diff > 0 && model.movies.count() > 0) alertify.success("Added " + diff + " new movie(s)"); // TODO ez nem jo mer feed valtasnal is kiirja h added
+            if (func) func(movieFeed, movieFeed.length - model.movies.count());
             model.movies = new Movies(movieFeed);
             changed();
-        }.bind(this)).fail(feedFailure);
+        }.bind(this)).fail(feedFailure);               
     }
     this.refreshDownloadStatus = function() {
-        $.getJSON(FEED_DOWNLOADING, function(movieFeed) {
-            model.movies.refresh(movieFeed);
-            changed();
-        }.bind(this)).fail(feedFailure);
+        function refresh(feed) {
+            $.getJSON(feed, function(movieFeed) {
+                model.movies.refresh(movieFeed);
+                changed();
+            }.bind(this)).fail(feedFailure);
+        }
+        refresh(FEED_DOWNLOADING);
+        refresh(FEED_COMPLETED);        
+        if (model.url == FEED_COMPLETED || model.url == FEED_DOWNLOADING)
+            this.loadMovies();
     }    
     this.refreshMovie = function(aMovie) {
         aMovie.download.status = "reloading";
         changed();
-        $.getJSON(model.url + "/reload/" + encodeURIComponent(aMovie.torrent.guid), function(reloadedMovie) {
+        $.getJSON("/feed/all/reload/" + encodeURIComponent(aMovie.torrent.guid), function(reloadedMovie) {
             model.movies.refresh([reloadedMovie]);
             model.details = null;
             alertify.success("Reloaded " + reloadedMovie.torrent.title);
@@ -332,19 +344,18 @@ var Feed = function(changeHandler) {
     this.downloadMovie = function(aMovie) {
         alertify.confirm("Download " + aMovie.torrent.title + "?", function (e) {
             if (e) {
-                $.getJSON(model.url + '/download/' + encodeURIComponent(aMovie.torrent.guid), function(any) {
+                $.getJSON('/feed/all/download/' + encodeURIComponent(aMovie.torrent.guid), function(any) {
                     alertify.success("Download started " + aMovie.torrent.title);
                 }.bind(this)).fail(feedFailure);
             }
         }.bind(this));
     } 
     this.playMovie = function(aMovie) {
-        $.getJSON(model.url + '/play/' + encodeURIComponent(aMovie.torrent.guid), function(any) {
+        $.getJSON('/feed/all/play/' + encodeURIComponent(aMovie.torrent.guid), function(any) {
             alertify.success("Playing " + aMovie.torrent.title);
         }.bind(this)).fail(feedFailure);
     }
     this.search = function(text) {
-        model.url = FEED_ALL;
         model.pageNumber = 0;    
         if (text) {
             model.filter = model.advancedSearch ? FILTER_EXPRESSION(text) : FILTER_TEXT(text);
@@ -356,6 +367,11 @@ var Feed = function(changeHandler) {
     this.toggleAdvancedSearch = function(text) {        
         model.advancedSearch = !model.advancedSearch;
         changed();
+    }
+    this.reloadAll = function(func) {
+        $.getJSON("/feed/all/reload", function(reloadedMovie) {
+            this.loadMovies(func);
+        }.bind(this)).fail(feedFailure);        
     }
     function changed() {
         changeHandler(model)
@@ -380,8 +396,8 @@ function start(dom) {
         React.render(React.createElement(Shelf, {model: model}), dom);
     };
     var feed = new Feed(renderFeed);
-    setInterval(function () { feed.refreshDownloadStatus() }, 3000);
-    setInterval(function () { feed.loadMovies() }, 60000 * 5);
+    setInterval(function () { feed.refreshDownloadStatus() }, 5000);
+    setInterval(function () { feed.loadMovies(notifyAboutNewlyAdded); }, 60000 * 10);
     feed.loadMovies();                
     EventBus.on('next-page', feed.nextPage);
     EventBus.on('prev-page', feed.previousPage);
@@ -392,8 +408,19 @@ function start(dom) {
     EventBus.on('refresh-movie', feed.refreshMovie);
     EventBus.on('switch-feed', feed.switchFeed, feed);
     EventBus.on('search-text', feed.search, feed);
-    EventBus.on('logout', logout);
     EventBus.on('toggle-advanced-search', feed.toggleAdvancedSearch, feed);
+    EventBus.on('reload-all', function() { feed.reloadAll(notifyAboutReload); });
+    EventBus.on('logout', logout);    
+    
+}
+
+function notifyAboutNewlyAdded(movies, addedCount) {
+    if (addedCount > 0) 
+        alertify.success("Added " + addedCount + " new movie(s)", 45000);
+}
+
+function notifyAboutReload(movies, addedCount) {    
+    alertify.success("Reloaded feeds. Added " + addedCount + " movies(s)");
 }
 
 function logout() {

@@ -79,13 +79,16 @@ body {
 	text-align: left;
 	color: #000;
 	opacity: .7;
-	padding-right: 9px;
+	padding-right: 8px;
 	height: 47px;
 	line-height: 47px;
 	text-shadow: 0 1px rgba(255,255,255,0.25);
 	font-size: 12px;
 	cursor: pointer;
 	z-index: 10;
+}
+.shelf_header b:active {
+    opacity: .5;
 }
 .shelf_footer {
 	height: 62px;
@@ -141,7 +144,7 @@ body {
 	z-index: 10;
 }
 .shelf_btn {
-	opacity: .7;
+	opacity: .9;
 	padding: 0 8px 0 8px;
 	border: 1px solid #8d8d8d;
 	border-right-color: #929292;
@@ -150,11 +153,9 @@ body {
 	cursor: pointer;
 	font-weight: 600;
 	font-family: "Open Sans 600","Open Sans",sans-serif;
-	font-size: 11px;
-	border-color: #a4a3a3;
-	background-image: linear-gradient(to bottom,rgba(255,255,255,0.1),rgba(229,229,229,0.1));
+	font-size: 14px;
+	border-color: #a4a3a3;	
 	color: #210f00;
-	background-color: transparent;	
 	box-shadow: inset 0 1px 0 rgba(255,255,255,0.2),0 1px 0 rgba(255,255,255,0.2);
 	border-top: 1px solid #59300d;
 	border-right: 1px solid #5a310e;
@@ -163,6 +164,9 @@ body {
 	text-shadow: 0 1px rgba(255,255,255,0.2);
 	white-space: nowrap;
 	margin-right: 1px;
+}
+.shelf_btn:active {
+    opacity: .5;
 }
 .score { 
 	font-size: 10px;
